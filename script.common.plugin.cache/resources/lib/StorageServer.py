@@ -17,7 +17,6 @@
     Version 0.8
 '''
 
-import os
 import sys
 import socket
 import time
@@ -25,61 +24,45 @@ import hashlib
 import inspect
 import string
 import xbmc
+import xbmcaddon
+import xbmcvfs
 
-try: import sqlite
-except: pass
-try: import sqlite3
-except: pass
+try:
+    import sqlite3 as sqlite
+    SQL_VER = 3
+except ImportError:
+    try:
+        import sqlite
+        SQL_VER = 2
+    except ImportError:
+        raise ImportError('Failed to import sqlite')
 
 
 class StorageServer():
-    def __init__(self, table=None, timeout=24, instance=False):
-        self.version = u"2.5.4"
-        self.plugin = u"StorageClient-" + self.version
+    def __init__(self, table=None, timeout=24, instance=False, debug=False, debug_level=3):
         self.instance = instance
         self.die = False
+        self.dbg = debug
+        self.dbglevel = debug_level
 
-        if hasattr(sys.modules["__main__"], "dbg"):
-            self.dbg = sys.modules["__main__"].dbg
-        else:
-            self.dbg = False
-
-        if hasattr(sys.modules["__main__"], "dbglevel"):
-            self.dbglevel = sys.modules["__main__"].dbglevel
-        else:
-            self.dbglevel = 3
-
-        if hasattr(sys.modules["__main__"], "xbmc"):
-            self.xbmc = sys.modules["__main__"].xbmc
-        else:
-            import xbmc
-            self.xbmc = xbmc
-
-        if hasattr(sys.modules["__main__"], "xbmcvfs"):
-            self.xbmcvfs = sys.modules["__main__"].xbmcvfs
-        else:
-            import xbmcvfs
-            self.xbmcvfs = xbmcvfs
-
-        if hasattr(sys.modules["__main__"], "xbmcaddon"):
-            self.xbmcaddon = sys.modules["__main__"].xbmcaddon
-        else:
-            import xbmcaddon
-            self.xbmcaddon = xbmcaddon
-
-        self.settings = self.xbmcaddon.Addon(id='script.common.plugin.cache')
+        self.settings = xbmcaddon.Addon(id='script.common.plugin.cache')
         self.language = self.settings.getLocalizedString
 
-        self.path = self.xbmc.translatePath('special://temp/')
-        if not self.xbmcvfs.exists(self.path.decode('utf8', 'ignore')):
+        self.version = self.settings.getAddonInfo('version').decode('utf8', 'ignore')
+        self.plugin = u"StorageClient-" + self.version
+
+        self._path = self.settings.getSetting("path").decode('utf8', 'ignore')
+        if not self._path:
+            self._path = 'special://temp/'
+
+        self.path = xbmc.translatePath(self._path)
+        if not xbmcvfs.exists(self.path.decode('utf8', 'ignore')):
             self._log(u"Making path structure: " + self.path)
-            self.xbmcvfs.mkdir(self.path)
-        self.path = os.path.join(self.path, 'commoncache.db')
+            xbmcvfs.mkdir(self.path)
+        self.path = xbmc.translatePath('%s%s' % (self._path, 'commoncache.db'))
 
         self.socket = ""
         self.clientsocket = False
-        self.sql2 = False
-        self.sql3 = False
         self.abortRequested = False
         self.daemon_start_time = time.time()
         if self.instance:
@@ -88,7 +71,6 @@ class StorageServer():
             self.idle = 3
 
         self.platform = sys.platform
-        self.modules = sys.modules
         self.network_buffer_size = 4096
 
         if isinstance(table, str) and len(table) > 0:
@@ -101,12 +83,10 @@ class StorageServer():
 
     def _startDB(self):
         try:
-            if "sqlite3" in self.modules:
-                self.sql3 = True
+            if SQL_VER == 3:
                 self._log("sql3 - " + self.path, 2)
-                self.conn = sqlite3.connect(self.path, check_same_thread=False)
-            elif "sqlite" in self.modules:
-                self.sql2 = True
+                self.conn = sqlite.connect(self.path, check_same_thread=False)
+            elif SQL_VER == 2:
                 self._log("sql2 - " + self.path, 2)
                 self.conn = sqlite.connect(self.path)
             else:
@@ -117,7 +97,7 @@ class StorageServer():
             return True
         except Exception, e:
             self._log("Exception: " + repr(e))
-            self.xbmcvfs.delete(self.path)
+            xbmcvfs.delete(self.path)
             return False
 
     def _aborting(self):
@@ -125,11 +105,12 @@ class StorageServer():
             if self.die:
                 return True
         else:
-            return self.xbmc.abortRequested
+            return xbmc.abortRequested
         return False
         
     def _usePosixSockets(self):
-      if self.platform == "win32" or xbmc.getCondVisibility('system.platform.android') or xbmc.getCondVisibility('system.platform.ios') or xbmc.getCondVisibility('system.platform.tvos'):
+      if self.platform == "win32" or xbmc.getCondVisibility('system.platform.android') or \
+              xbmc.getCondVisibility('system.platform.ios') or xbmc.getCondVisibility('system.platform.tvos'):
         return False
       else:
         return True
@@ -141,11 +122,11 @@ class StorageServer():
 
             if self._usePosixSockets():
                 self._log("POSIX", 4)
-                self.socket = os.path.join(self.xbmc.translatePath('special://temp/').decode("utf-8"), 'commoncache.socket')
-                #self.socket = os.path.join(self.xbmc.translatePath(self.settings.getAddonInfo("profile")).decode("utf-8"), 'commoncache.socket')
-                if self.xbmcvfs.exists(self.socket) and check_stale:
+                self.socket = xbmc.translatePath('%s%s' % (self._path, 'commoncache.socket')).decode("utf-8")
+                # self.socket = xbmc.translatePath('%s%s' % (self.settings.getAddonInfo("profile"), 'commoncache.socket')).decode("utf-8")
+                if xbmcvfs.exists(self.socket) and check_stale:
                     self._log("Deleting stale socket file : " + self.socket)
-                    self.xbmcvfs.delete(self.socket)
+                    xbmcvfs.delete(self.socket)
             else:
                 self._log("Non-POSIX", 4)
                 port = self.settings.getSetting("port")
@@ -194,11 +175,11 @@ class StorageServer():
     def _showMessage(self, heading, message):
         self._log(repr(type(heading)) + " - " + repr(type(message)))
         duration = 10 * 1000
-        self.xbmc.executebuiltin((u'XBMC.Notification("%s", "%s", %s)' % (heading, message, duration)).encode("utf-8"))
+        xbmc.executebuiltin((u'Notification("%s", "%s", %s)' % (heading, message, duration)).encode("utf-8"))
 
     def run(self):
         self.plugin = "StorageServer-" + self.version
-        #print self.plugin + " Storage Server starting " + self.path
+        # self._log(self.plugin + " Storage Server starting " + self.path)
         self._sock_init(True)
 
         if not self._startDB():
@@ -213,7 +194,7 @@ class StorageServer():
             sock.bind(self.socket)
         except Exception, e:
             self._log("Exception: " + repr(e))
-            self._showMessage(self.language(100), self.language(200))
+            self._showMessage(self.language(30100), self.language(30200))
 
             return False
 
@@ -260,10 +241,10 @@ class StorageServer():
         sock.close()
         # self.conn.close()
         if self._usePosixSockets():
-            if self.xbmcvfs.exists(self.socket):
+            if xbmcvfs.exists(self.socket):
                 self._log("Deleting socket file")
-                self.xbmcvfs.delete(self.socket)
-        print self.plugin + " Closed down"
+                xbmcvfs.delete(self.socket)
+        self._log(self.plugin + " Closed down")
 
     def _recv(self, sock):
         data = "   "
@@ -338,7 +319,8 @@ class StorageServer():
                     else:
                         data = ""
 
-                    self._log(u"Got response " + str(i) + u" - " + str(result) + u" == " + str(len(send_buffer)) + u" | " + str(len(data)) + u" - " + repr(send_buffer)[len(send_buffer) - 5:], 3)
+                    self._log(u"Got response " + str(i) + u" - " + str(result) + u" == " + str(len(send_buffer)) +
+                              u" | " + str(len(data)) + u" - " + repr(send_buffer)[len(send_buffer) - 5:], 3)
 
             except socket.error, e:
                 self._log(u"Except error " + repr(e))
@@ -455,25 +437,26 @@ class StorageServer():
         return " "
 
     def _sqlExecute(self, sql, data):
-        try:
-            self._log(repr(sql) + u" - " + repr(data), 5)
-            if self.sql2:
+        self._log(repr(sql) + u" - " + repr(data), 5)
+        if SQL_VER == 2:
+            try:
                 self.curs.execute(sql, data)
-            elif self.sql3:
+            except:
+                self._log(u"Uncaught exception")
+        elif SQL_VER == 3:
+            try:
                 sql = sql.replace("%s", "?")
                 if isinstance(data, tuple):
                     self.curs.execute(sql, data)
                 else:
                     self.curs.execute(sql, (data,))
-        except sqlite3.DatabaseError, e:
-            if self.xbmcvfs.exists(self.path) and (str(e).find("file is encrypted") > -1 or str(e).find("not a database") > -1):
-                self._log(u"Deleting broken database file")
-                self.xbmcvfs.delete(self.path)
-                self._startDB()
-            else:
-                self._log(u"Database error, but database NOT deleted: " + repr(e))
-        except:
-            self._log(u"Uncaught exception")
+            except sqlite.DatabaseError, e:
+                if xbmcvfs.exists(self.path) and (str(e).find("file is encrypted") > -1 or str(e).find("not a database") > -1):
+                    self._log(u"Deleting broken database file")
+                    xbmcvfs.delete(self.path)
+                    self._startDB()
+                else:
+                    self._log(u"Database error, but database NOT deleted: " + repr(e))
 
     def _checkTable(self, table):
         try:
@@ -730,9 +713,9 @@ class StorageServer():
     def _log(self, description, level=0):
         if self.dbg and self.dbglevel > level:
             try:
-                self.xbmc.log(u"[%s] %s : '%s'" % (self.plugin, repr(inspect.stack()[1][3]), description), self.xbmc.LOGNOTICE)
+                xbmc.log(u"[%s] %s : '%s'" % (self.plugin, repr(inspect.stack()[1][3]), description), xbmc.LOGNOTICE)
             except:
-                self.xbmc.log(u"[%s] %s : '%s'" % (self.plugin, repr(inspect.stack()[1][3]), repr(description)), self.xbmc.LOGNOTICE)
+                xbmc.log(u"[%s] %s : '%s'" % (self.plugin, repr(inspect.stack()[1][3]), repr(description)), xbmc.LOGNOTICE)
 
 # Check if this module should be run in instance mode or not.
 __workersByName = {}
@@ -744,17 +727,12 @@ def run_async(func, *args, **kwargs):
     return worker
 
 def checkInstanceMode():
-    if hasattr(sys.modules["__main__"], "xbmcaddon"):
-        xbmcaddon = sys.modules["__main__"].xbmcaddon
-    else:
-        import xbmcaddon
-
     settings = xbmcaddon.Addon(id='script.common.plugin.cache')
     if settings.getSetting("autostart") == "false":
         s = StorageServer(table=False, instance=True)
-        print u" StorageServer Module loaded RUN(instance only)"
+        xbmc.log(u" StorageServer Module loaded RUN(instance only)", xbmc.LOGNOTICE)
 
-        print s.plugin + u" Starting server"
+        xbmc.log(s.plugin + u" Starting server", xbmc.LOGNOTICE)
 
         run_async(s.run)
         return True

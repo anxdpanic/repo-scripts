@@ -16,22 +16,17 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
     Version 0.8
 '''
-import sys
 import xbmc
 import xbmcaddon
-import xbmcvfs
 
 settings = xbmcaddon.Addon(id='script.common.plugin.cache')
 dbg = settings.getSetting("debug") == "true"
-dbglevel = 3
-
 
 def run():
-    sys.path = [settings.getAddonInfo('path').decode('utf-8') + "/lib"] + sys.path
     import StorageServer
-    s = StorageServer.StorageServer(False)
-    print " StorageServer Module loaded RUN"
-    print s.plugin + " Starting server"
+    s = StorageServer.StorageServer(False, debug=dbg)
+    xbmc.log("StorageServer Module loaded RUN", xbmc.LOGNOTICE)
+    xbmc.log(s.plugin + " Starting server", xbmc.LOGNOTICE)
     s.run()
     return True
 

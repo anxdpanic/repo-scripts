@@ -2,10 +2,11 @@
 <settings>
 
   <!-- General -->
-  <category label="001">
-    <setting id="debug" type="bool" label="002" default="false" />
-    <setting id="autostart" type="bool" label="003" default="true" />
-    <setting id="port" type="number" label="005" default="59994" />
-    <setting id="timeout" type="number" label="004" enable="!eq(-1,true)" default="15" />
+  <category label="30001">
+    <setting id="debug" type="bool" label="30002" default="false" />
+    <setting id="autostart" type="bool" label="30003" default="true" />
+    <setting id="port" type="number" label="30005" default="59994" />
+    <setting id="timeout" type="number" label="30004" enable="!eq(-1,true)" default="15" />
+    <setting id="path" type="folder" label="30006" source="" />
   </category>
 </settings>

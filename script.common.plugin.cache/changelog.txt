@@ -1,3 +1,16 @@
+[B]Version 2.5.9[/B]
+- removed all instances of print in favor of xbmc.log
+- removed all instances of os.path.join in favor of xbmc.translatePath
+- removed all instances of module usage like self.xbmc*. in favor of xbmc*.
+- moved default.py to lib/, removed sys.path adding lib/ to import StorageServer
+- moved lib/ to resources/lib/, updated addon.xml to reflect
+- moved debug and debug_levels to StorageServer parameters
+- removed all uses of sys for import and import testing
+- favor sqlite 3 over 2, fail on sqlite importError  # if we can't import sqlite there is a much larger problem
+- add global SQL_VER set to version in use
+- add 'Custom Path' to settings to allow users to change the default commoncache.db/socket location
+- other minor
+
 [B]Version 2.5.8[/B]
 - Fix plugin loading on windows
 
